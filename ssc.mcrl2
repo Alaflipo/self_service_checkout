@@ -1,0 +1,91 @@
+sort 
+    Barcode = struct b1; 
+    Id = struct i1; 
+    Msg_sb = struct sb_fail; 
+    Msg_pt = struct pt_suc | pt_fail; 
+    Msg_pr = struct pr_suc | pr_fail; 
+    Price = Id -> Nat; 
+
+act 
+    % actions for the scanner block
+    add_scanner: Barcode; 
+    s_add_barcode: Barcode; % communication to the backend block
+
+    % actions for the backend block
+    r_add_barcode: Barcode; % communication from the scanner block
+    send_backend: Barcode; 
+    receive_backend: Id # Nat; 
+    message_backend: Msg_sb; 
+    message_display: Msg_sb; 
+    s_add_list: Id # Nat; % communication to the shopping list block
+    
+    % actions for the shopping list block 
+    r_add_list: Id # Nat; % communication from the backend block
+    update_display: Bag(Id) # Price; 
+    remove_display: Id; 
+    add_display: Id; 
+    end_session; 
+    s_end_session: Bag(Id) # Price; % communication to the payment terminal block
+    r_clear_list; % communication from the printer block
+    r_payment_fail; % communication from the payment terminal block 
+
+    % actions for the payment terminal block
+    r_end_session: Bag(Id) # Price; % communication from the shoping list block
+    send_payment: Nat; 
+    receive_payment: Msg_pt; 
+    message_display: Msg_pt;
+    s_print_receipt: Bag(Id) # Price; % communciation to the printer block 
+    s_payment_fail; % communication to the shopping list block 
+
+    % actions for the printer block
+    r_print_receipt: Bag(Id) # Price; % communciation from the printer block
+    send_printer: Bag(Id) # Price; 
+    receive_printer: Msg_pr; 
+    message_display: Msg_pr; 
+    s_end_session; % communication to the shopping list block
+
+    % communications
+    add_barcode: Barcode;
+    add_list: Id # Nat;
+    end_session: Bag(Id) # Price;
+    print_receipt: Bag(Id) # Price;
+    clear_list;
+    payment_fail; 
+
+proc 
+    % Scanner handler 
+    S = sum b:Barcode. add_scanner(b).s_add_barcode(b).S; 
+
+    % Backend handler 
+    B(maxprice: Nat) = sum b:Barcode. r_add_barcode(b).send_backend(b).( 
+                                   (sum id:Id, price:Nat. (price <= maxprice && price > 0) -> 
+                                                            receive_backend(id, price).s_add_list(id, price) <> delta) + 
+                                   (sum msg:Msg_sb. message_backend(msg).message_display(msg))
+                                ).B(maxprice);
+
+    % Shopping list handler                         
+    SL(items: Bag(Id), prices: Price, maxitems: Nat, maxprice: Nat) = 
+        (sum id:Id, price:Nat. (price <= maxprice && count(id, items) <= maxitems) -> 
+            r_add_list(id, price).update_display(items + {id:1}, prices[id->price]) <> delta).
+            SL({id: 1} + items, prices[id->price], maxitems, maxprice) + 
+        (sum id:Id.remove_display(id).update_display(items - {id:1}, prices).SL(items - {id:1}, prices, maxitems, maxprice)) + 
+        (sum id:Id. (count(id, items + {id:1}) <= maxitems) ->  
+            add_display(id).update_display(items + {id:1}, prices).SL(items + {id:1}, prices, maxitems, maxprice) <> delta) + 
+        (end_session.s_end_session(items, prices).(
+            payment_fail.SL(items, prices, maxitems, maxprice) + 
+            clear_list.SL({:}, prices, maxitems, maxprice)
+        )); 
+    
+    % Payment terminal handler 
+    PT = sum bag:Bag, prices:Price. (r_end_session(bag, prices).send_payment()) 
+
+
+
+init 
+    allow(
+        {add_scanner,  send_backend,  receive_backend, message_backend, message_display, s_add_list, 
+         add_barcode, add_list, end_session, print_receipt, clear_list},
+        comm(
+            {s_add_barcode | r_add_barcode -> add_barcode}, 
+            S || B(1)
+    )); 
