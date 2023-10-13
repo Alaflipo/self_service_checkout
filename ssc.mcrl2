@@ -4,7 +4,23 @@ sort
     Msg_sb = struct sb_fail; 
     Msg_pt = struct pt_suc | pt_fail; 
     Msg_pr = struct pr_suc | pr_fail; 
-    Price = Id -> Nat; 
+    sort Price = struct price_item(id_item: Id, value: Nat);
+
+% insert function on a list of prices that replaces an old price if it is in the list
+map insert: Price # List(Price) -> List(Price); 
+var p, p_in: Price;
+    p_list: List(Price);
+eqn insert(p, []) = [p];
+    insert(p, p_in |> p_list) = if(id_item(p) == id_item(p_in), p |> p_list, p_in |> insert(p, p_list));
+
+map total_price: Bag(Id) # List(Price) -> Nat; 
+var i_bag: Bag(Id); 
+    i: Id; 
+    p_list: List(Price);
+    p: Price; 
+eqn total_price({:}, p_list) = 0; 
+    total_price(i_bag, []) = 0; 
+    total_price(i_bag, p |> p_list) = if(id_item(p) in i_bag, count(id_item(p), i_bag) * value(p), 0)  + total_price(i_bag, p_list);
 
 act 
     % actions for the scanner block
@@ -21,39 +37,40 @@ act
     
     % actions for the shopping list block 
     r_add_list: Id # Nat; % communication from the backend block
-    update_display: Bag(Id) # Price; 
+    update_display: Bag(Id) # List(Price); 
     remove_display: Id; 
     add_display: Id; 
     end_session; 
-    s_end_session: Bag(Id) # Price; % communication to the payment terminal block
+    s_end_session: Bag(Id) # List(Price); % communication to the payment terminal block
     r_clear_list; % communication from the printer block
     r_payment_fail; % communication from the payment terminal block 
 
     % actions for the payment terminal block
-    r_end_session: Bag(Id) # Price; % communication from the shoping list block
+    r_end_session: Bag(Id) # List(Price); % communication from the shoping list block
     send_payment: Nat; 
     receive_payment: Msg_pt; 
     message_display: Msg_pt;
-    s_print_receipt: Bag(Id) # Price; % communciation to the printer block 
+    s_print_receipt: Bag(Id) # List(Price); % communciation to the printer block 
     s_payment_fail; % communication to the shopping list block 
 
     % actions for the printer block
-    r_print_receipt: Bag(Id) # Price; % communciation from the printer block
-    send_printer: Bag(Id) # Price; 
+    r_print_receipt: Bag(Id) # List(Price); % communciation from the printer block
+    send_printer: Bag(Id) # List(Price); 
     receive_printer: Msg_pr; 
     message_display: Msg_pr; 
-    s_end_session; % communication to the shopping list block
+    s_clear_list; % communication to the shopping list block
 
     % communications
     add_barcode: Barcode;
     add_list: Id # Nat;
-    end_session: Bag(Id) # Price;
-    print_receipt: Bag(Id) # Price;
+    end_session: Bag(Id) # List(Price);
+    print_receipt: Bag(Id) # List(Price);
     clear_list;
     payment_fail; 
 
 proc 
     % Scanner handler 
+    % QUESTION: add_scanner can always be done even if we have hit our max item limit 
     S = sum b:Barcode. add_scanner(b).s_add_barcode(b).S; 
 
     % Backend handler 
@@ -64,28 +81,48 @@ proc
                                 ).B(maxprice);
 
     % Shopping list handler                         
-    SL(items: Bag(Id), prices: Price, maxitems: Nat, maxprice: Nat) = 
-        (sum id:Id, price:Nat. (price <= maxprice && count(id, items) <= maxitems) -> 
-            r_add_list(id, price).update_display(items + {id:1}, prices[id->price]) <> delta).
-            SL({id: 1} + items, prices[id->price], maxitems, maxprice) + 
-        (sum id:Id.remove_display(id).update_display(items - {id:1}, prices).SL(items - {id:1}, prices, maxitems, maxprice)) + 
-        (sum id:Id. (count(id, items + {id:1}) <= maxitems) ->  
+    SL(items: Bag(Id), prices: List(Price), maxitems: Nat, maxprice: Nat) = 
+        % QUESTION: How do I prevent the insert call twice? 
+        (sum id:Id, price:Nat. (((price <= maxprice && count(id, items) <= maxitems) -> 
+            r_add_list(id, price).update_display(items + {id:1}, insert(price_item(id, price), prices))  <> delta).
+            SL({id: 1} + items, insert(price_item(id, price), prices), maxitems, maxprice))) + 
+        % QUESTION: How do I remove possibility of remove and add_display calls, check before update_display or after?
+        (sum id:Id. ((count(id, items) > 0) -> 
+            remove_display(id).update_display(items - {id:1}, prices).SL(items - {id:1}, prices, maxitems, maxprice) <> delta)) + 
+        (sum id:Id. ((count(id, items + {id:1}) <= maxitems) && (count(id, items) > 0)) ->  
             add_display(id).update_display(items + {id:1}, prices).SL(items + {id:1}, prices, maxitems, maxprice) <> delta) + 
-        (end_session.s_end_session(items, prices).(
-            payment_fail.SL(items, prices, maxitems, maxprice) + 
-            clear_list.SL({:}, prices, maxitems, maxprice)
-        )); 
+        ((exists id:Id. (id in items)) -> end_session.s_end_session(items, prices).(
+            r_payment_fail.SL(items, prices, maxitems, maxprice) + 
+            r_clear_list.SL({:}, prices, maxitems, maxprice)) <> delta  
+        ); 
     
     % Payment terminal handler 
-    PT = sum bag:Bag, prices:Price. (r_end_session(bag, prices).send_payment()) 
+    PT = sum items:Bag(Id), prices:List(Price). (r_end_session(items, prices).send_payment(total_price(items, prices)).
+        (sum msg:Msg_pt. receive_payment(msg).message_display(msg).(
+            (msg == pt_suc) -> s_print_receipt(items, prices).PT <> s_payment_fail.PT
+        )));
+    
+    % printer handler 
+    PR = sum items:Bag(Id), prices:List(Price). (r_print_receipt(items, prices).PR'(items, prices));
 
-
+    PR'(items: Bag(Id), prices: List(Price)) = send_printer(items, prices).
+        (sum msg:Msg_pr. receive_printer(msg).message_display(msg).(
+            (msg == pr_suc) -> s_clear_list.PR <> PR'(items, prices)
+        ));
 
 init 
     allow(
-        {add_scanner,  send_backend,  receive_backend, message_backend, message_display, s_add_list, 
-         add_barcode, add_list, end_session, print_receipt, clear_list},
+        {add_scanner,  
+         send_backend,  receive_backend, message_backend, message_display,
+         update_display, remove_display, add_display, end_session, 
+         send_payment, receive_payment,
+         send_printer, receive_printer, 
+         add_barcode, add_list, print_receipt, clear_list, payment_fail
+        },
         comm(
-            {s_add_barcode | r_add_barcode -> add_barcode}, 
-            S || B(1)
+            {s_add_barcode | r_add_barcode -> add_barcode, s_add_list | r_add_list -> add_list, 
+             s_end_session | r_end_session -> end_session, s_print_receipt | r_print_receipt -> print_receipt,
+             s_clear_list | r_clear_list -> clear_list, s_payment_fail | r_payment_fail -> payment_fail
+            }, 
+            S || B(1) || SL({:}, [], 1, 1) || PT || PR
     )); 
