@@ -1,0 +1,6 @@
+nu X(items: Bag(Id) = {:}).
+    [!((exists id: Id, price: Nat. receive_backend(id,price)) || (exists id: Id. add_display(id)) || (exists id: Id. remove_display(id)))]X(items) &&
+    forall id: Id, price: Nat.([receive_backend(id,price)]X(items + {id:1})) && 
+    forall id: Id.([add_display(id)]X(items + {id:1})) &&
+    forall id: Id.([remove_display(id)]X(items - {id:1})) && 
+    forall i: Bag(Id).([update_display(i).!(exists i2: Bag(Id). update_display(i2))*.message_display(pr_suc)](val(i==items) && X({:})))

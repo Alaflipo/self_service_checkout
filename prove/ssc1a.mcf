@@ -1,0 +1,5 @@
+% if receive_scanner(barcode) is received then send_backend(b) 
+% will eventually follow before message_display(pr_suc) is sent out
+
+forall b: Barcode. [true*.receive_scanner(b).!(send_backend(b))*]
+        <!(message_display(pr_suc))*.send_backend(b)>true

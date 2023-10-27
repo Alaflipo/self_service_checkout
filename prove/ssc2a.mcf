@@ -1,0 +1,4 @@
+forall id: Id.[!(exists items: Bag(Id).update_display(items))*.
+            (exists price:Nat. receive_backend(id, price)).
+            !((exists items: Bag(Id).update_display(items)) || message_display(pr_suc))*]
+            <!(message_display(pr_suc))*.update_display({id:1})>true
