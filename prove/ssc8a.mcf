@@ -1,0 +1,5 @@
+[true*]
+forall i:Nat. val(i < #L) => [update_display(L.i).!(exists items:Bag(Id).update_display(items))*]
+forall j:Nat. val(j < #P) => [update_display(P.j).
+    !((exists items:Bag(Id).update_display(items)) || (exists prices:List(Price). update_display(prices)))*]
+forall price:Nat. val(price <= 2) => [send_payment(price)]val(price == total_price(L.i, P.j))

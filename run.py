@@ -16,9 +16,18 @@ file_check = "out/ssc_red.lts"
 files = [f for f in listdir(path) if isfile(join(path, f))]
 mcf_files = [f for f in files if f.split('.')[1] == "mcf"]
 
+mcf_files.sort()
+mcf_files = mcf_files[14:] + mcf_files[1:14]
+
+results = {}
 for file in mcf_files: 
+    if (file == "ssc13a.mcf" or file=="ssc14a.mcf" ):
+        continue
     name = file.split('.')[0]
-    print(f'Checking {file}:')
-    os.system(f'lts2pbes -v -c -f prove/{file} {file_check} prove/{name}.pbes')
-    os.system(f'pbessolve -v --file={file_check} --evidence-file=prove/evidence/{name}.lts prove/{name}.pbes')
-    # os.system(f'lps2lts prove/evidence/{name}.lps prove/evidence/{name}.lts')
+    print(f'\nChecking {file}:\n')
+    os.system(f'lts2pbes -v -c -f prove/{file} {file_check} prove/pbes/{name}.pbes')
+    result = os.popen(f'pbessolve -v --file={file_check} --evidence-file=prove/evidence/{name}.lts prove/pbes/{name}.pbes').read()
+    print(result)
+    results[name] = result.strip()
+
+print(results)

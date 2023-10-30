@@ -1,0 +1,2 @@
+[true*.message_display(pr_suc).!(update_display({:}))*]
+forall i:Nat. ((val(i < #L) && !val({:} == L.i)) => [update_display(L.i)]false)

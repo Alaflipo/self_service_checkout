@@ -1,0 +1,1 @@
+[!(receive_printer(pr_fail))*.message_display(pr_fail)]false

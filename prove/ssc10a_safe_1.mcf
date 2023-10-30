@@ -1,0 +1,1 @@
+[!(receive_payment(pay_fail))*.message_display(pay_fail)]false

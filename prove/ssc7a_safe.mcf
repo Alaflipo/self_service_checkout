@@ -1,0 +1,1 @@
+[true*.update_display({:}).(exists items:Bag(Id). update_display(items))*.(exists price:Nat.send_payment(price))]false

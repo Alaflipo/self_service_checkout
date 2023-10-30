@@ -1,0 +1,1 @@
+[!(message_display(pay_suc))*.(exists items:Bag(Id), prices:List(Price). send_printer(items, prices))]false

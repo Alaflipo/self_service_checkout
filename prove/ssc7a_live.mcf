@@ -1,0 +1,3 @@
+forall i: Nat. (val(i < #L) && !val(L.i == {:})) =>
+    [true*.update_display(L.i).!(exists items:Bag(Id). update_display(items))*.end_session]
+    (mu X.([!(exists price:Nat.send_payment(price))]X && <true>true))

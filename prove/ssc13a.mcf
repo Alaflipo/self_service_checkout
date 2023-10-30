@@ -1,0 +1,7 @@
+forall id:Id. mu X(counter: Nat = 0).[!((exists price:Price. receive_backend(id, price)) || 
+        add_display(id) || remove_display(id) || message_display(pr_suc))]X(counter) && 
+    [(exists price:Price. receive_backend(id, price))]X(counter + 1) &&
+    [add_display(id)]X(counter + 1) && 
+    [message_display(pr_suc)]X(0) && 
+    [remove_display(id)](val(counter >= 0) && X(max(counter - 1, 0)))
+    

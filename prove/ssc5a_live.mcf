@@ -1,0 +1,7 @@
+[true*]
+forall id: Id, n:Nat, i:Nat. (val(i < #L) && !val(id in L.i) && val(n < 2) && val(n>0)) =>
+    [update_display(L.i + {id:n}).
+    !((exists i: Bag(Id).update_display(i)) || message_display(pr_suc))*.
+    add_display(id).
+    !(update_display(L.i + {id:n+1}) || message_display(pr_suc))*]
+    <!(message_display(pr_suc))*.update_display(L.i + {id:n+1})>true

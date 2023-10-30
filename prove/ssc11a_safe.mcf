@@ -1,0 +1,1 @@
+[true*.message_display(pr_suc).!(receive_printer(pr_suc))*.message_display(pr_suc)]false

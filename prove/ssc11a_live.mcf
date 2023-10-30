@@ -1,0 +1,2 @@
+[true*.receive_printer(pr_suc)]
+mu X.([!(message_display(pr_suc))]X&& <true>true)

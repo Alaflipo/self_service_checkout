@@ -1,10 +1,20 @@
 sort 
-    Barcode = struct b1; 
-    Id = struct i1; 
+    Barcode = struct b1 | b2; 
+    Id = struct i1 | i2; 
+    Price = struct price_item(id_item: Id, value: Nat);
     Msg_sb = struct sb_fail; 
-    Msg_pt = struct pt_suc | pt_fail; 
+    Msg_pt = struct pay_suc | pay_fail; 
     Msg_pr = struct pr_suc | pr_fail; 
-    sort Price = struct price_item(id_item: Id, value: Nat);
+
+map L:List(Bag(Id));
+eqn L = [ {:}, {i1:1}, {i1:2}, {i2:1}, {i2:2} ];
+
+map P:List(List(Price)); 
+eqn P = [ [], 
+    [price_item(i1, 1)], [price_item(i1, 1), price_item(i2, 1)], [price_item(i1, 1), price_item(i2, 2)], 
+    [price_item(i2, 1)], [price_item(i1, 2), price_item(i2, 1)],
+    [price_item(i1, 2)], [price_item(i1, 2), price_item(i2, 2)], 
+    [price_item(i2, 2)]]; 
 
 % insert function on a list of prices that replaces an old price if it is in the list
 map insert: Price # List(Price) -> List(Price); 
@@ -29,7 +39,7 @@ var i_bag: Bag(Id);
     p: Price; 
 eqn total_price({:}, p_list) = 0; 
     total_price(i_bag, []) = 0; 
-    total_price(i_bag, p |> p_list) = if(id_item(p) in i_bag, count(id_item(p), i_bag) * value(p), 0)  + total_price(i_bag, p_list);
+    total_price(i_bag, p |> p_list) = if(id_item(p) in i_bag, count(id_item(p), i_bag) * value(p), 0) + total_price(i_bag, p_list);
 
 act 
     % actions for input handler 
@@ -40,23 +50,23 @@ act
     s_finish; % communciation to the shopping list handler 
     s_add_barcode: Barcode; % communication to the backend handler
     s_add_item: Id; % communication to the shopping list handler
+    s_add_item: Id # Price; % communication to the shopping list handler
     s_remove_item: Id; % communcation to the shopping list handler 
-    r_suc_add: Id; % communication from the backend handler 
+    r_suc_add: Id # Price; % communication from the backend handler 
     r_fail_add; % communication from the backend handler 
     r_activate: Bool; % communication from the shopping list handler
 
     % actions for the backend handler
     r_add_barcode: Barcode; % communication from the input handler 
     send_backend: Barcode; 
-    receive_backend: Id # Nat; 
+    receive_backend: Id # Price; 
     message_backend: Msg_sb; 
     message_display: Msg_sb; 
-    s_add_item: Id # Nat; % communication to the shopping list handler
-    s_suc_add: Id; % communication to the input handler 
+    s_suc_add: Id # Price; % communication to the input handler 
     s_fail_add; % communication to the input handler
     
     % actions for the shopping list handler 
-    r_add_item: Id # Nat; % communication from the backend handler
+    r_add_item: Id # Price; % communication from the input handler
     r_add_item: Id; % communication from the input handler 
     r_remove_item: Id; % communication from the input handler 
     update_display: Bag(Id);  
@@ -83,12 +93,12 @@ act
     s_clear_list; % communication to the shopping list handler
 
     % communications
-    add_barcode: Barcode; % send backend request to add search and add barcode
-    add_item: Id # Nat;
+    add_barcode: Barcode; 
+    add_item: Id # Price;
     add_item: Id; 
     remove_item: Id; 
     finish; 
-    suc_add: Id; 
+    suc_add: Id # Price; 
     fail_add; 
     pay: Bag(Id) # List(Price);
     pay_fail; 
@@ -97,46 +107,60 @@ act
     activate: Bool; 
 
 proc 
-    % Input handler  
-    IH(amount: Nat, maxitems:Nat) = 
-        (sum b:Barcode. (amount < maxitems) -> (receive_scanner(b).s_add_barcode(b).( 
-            sum id:Id. r_suc_add(id).IH(amount + 1, maxitems) + r_fail_add.IH(amount, maxitems))) <> delta) + 
-        (sum id:Id. (amount < maxitems && amount > 0) -> 
-            add_display(id).add_item(id).IH(amount + 1, maxitems) <> delta) + 
-        (sum id:Id. (amount > 0) -> 
-            remove_display(id).s_remove_item(id).IH(max(amount - 1, 0), maxitems) <> delta) + 
-        ((exists id:Id. amount > 0) -> 
-            end_session.s_finish.(r_activate(false).IH(0, maxitems) + r_activate(true).IH(amount, maxitems)) <> delta);
-    
+
+    IH(items: Bag(Id), maxitem: Nat, maxprice: Nat) = 
+        (sum b: Barcode. receive_scanner(b).s_add_barcode(b).(
+            (sum id:Id, price:Price. r_suc_add(id, price).((count(id, items) < maxitem) -> 
+                s_add_item(id, price).r_activate(true).IH(items + {id:1}, maxitem, maxprice) 
+                <> message_display(sb_fail).IH(items, maxitem, maxprice)
+            )) + 
+            r_fail_add.IH(items, maxitem, maxprice)
+        )) + 
+        (sum id:Id. ((count(id, items) < maxitem) && (count(id, items) > 0)) -> 
+            add_display(id).s_add_item(id).r_activate(true).IH(items + {id:1}, maxitem, maxprice) 
+            <> delta) + 
+        (sum id:Id. (count(id, items) > 0) -> 
+            remove_display(id).s_remove_item(id).r_activate(true).IH(items - {id:1}, maxitem, maxprice)
+            <> delta) + 
+        ((exists id:Id. count(id, items) > 0) -> 
+            end_session.s_finish.(r_activate(false).IH({:}, maxitem, maxprice) + 
+                r_activate(true).IH(items, maxitem, maxprice)) 
+            <> delta);
+
     % Backend handler 
     BH(maxprice: Nat) = sum b:Barcode.r_add_barcode(b).send_backend(b).( 
-        (sum id:Id, price:Nat. (price <= maxprice && price > 0) -> 
-            receive_backend(id, price).s_add_item(id, price).s_suc_add(id).BH(maxprice) <> delta) +
+        (sum id:Id, price:Price. (value(price) <= maxprice && value(price) > 0 && id_item(price) == id) -> 
+            receive_backend(id, price).s_suc_add(id, price).BH(maxprice) <> delta) +
         (message_backend(sb_fail).message_display(sb_fail).s_fail_add.BH(maxprice)));
-            
+
     % Shopping list handler                         
     SL(items: Bag(Id), prices: List(Price), maxprice: Nat) = 
         % QUESTION: How do I prevent the insert call twice? 
-        (sum id:Id, price:Nat. (((price <= maxprice) -> 
-            r_add_item(id, price).update_display(items + {id:1}).update_display(insert(price_item(id, price), prices)) <> delta).
-            SL({id: 1} + items, insert(price_item(id, price), prices), maxprice))) + 
+        (sum id:Id, price:Price. (((value(price) <= maxprice) -> 
+            r_add_item(id, price).update_display(items + {id:1}).update_display(insert(price, prices)) 
+            <> delta).
+            s_activate(true).SL({id: 1} + items, insert(price, prices), maxprice))) + 
         % QUESTION: How do I remove possibility of remove and add_display calls, check before update_display or after?
-        (sum id:Id. ((count(id, items) > 0) -> r_remove_item(id).(
+        (sum id:Id. ((count(id, items) > 0) -> r_remove_item(id).(update_display(items - {id:1}).
             (count(id, items) == 1) ->
-                update_display(items - {id:1}).update_display(remove(id, prices)).SL(items - {id:1}, remove(id, prices), maxprice) <>
-                update_display(items - {id:1}).SL(items - {id:1}, prices, maxprice)
+                update_display(remove(id, prices)).s_activate(true).
+                    SL(items - {id:1}, remove(id, prices), maxprice) 
+                <> s_activate(true).SL(items - {id:1}, prices, maxprice)
             ) <> delta)) + 
         (sum id:Id. (count(id, items) > 0) ->  r_add_item(id).
-            update_display(items + {id:1}).SL(items + {id:1}, prices, maxprice) <> delta) + 
+            update_display(items + {id:1}).s_activate(true).SL(items + {id:1}, prices, maxprice) 
+            <> delta) + 
         ((exists id:Id. (id in items)) -> r_finish.s_pay(items, prices).(
             r_pay_fail.s_activate(true).SL(items, prices, maxprice) + 
-            r_clear_list.update_display({:}).update_display([]).s_activate(false).SL({:}, [], maxprice)) <> delta  
+            r_clear_list.update_display({:}).update_display([]).s_activate(false).SL({:}, [], maxprice)) 
+            <> delta  
         ); 
     
     % Payment terminal handler 
-    PT = sum items:Bag(Id), prices:List(Price). (r_pay(items, prices).send_payment(total_price(items, prices)).
+    PT = sum items:Bag(Id), prices:List(Price). (r_pay(items, prices).
+        send_payment(total_price(items, prices)).
         (sum msg:Msg_pt. receive_payment(msg).message_display(msg).(
-            (msg == pt_suc) -> s_print_receipt(items, prices).PT <> s_pay_fail.PT
+            (msg == pay_suc) -> s_print_receipt(items, prices).PT <> s_pay_fail.PT
         )));
     
     % printer handler 
@@ -146,27 +170,6 @@ proc
         (sum msg:Msg_pr. receive_printer(msg).message_display(msg).(
             (msg == pr_suc) -> s_clear_list.PR <> PR'(items, prices)
         ));
-
-% init 
-%     allow(
-%         {
-%         receive_scanner, 
-%         send_backend, receive_backend, message_backend, message_display,
-%         update_display, remove_display, add_display, end_session, 
-%         send_payment, receive_payment,
-%         send_printer, receive_printer, 
-%         add_barcode, add_item, remove_item, finish, suc_add, fail_add, pay,
-%         pay_fail, print_receipt, clear_list, activate
-%         },
-%         comm(
-%             {s_add_barcode | r_add_barcode -> add_barcode, s_add_item | r_add_item -> add_item, 
-%             s_remove_item | r_remove_item -> remove_item, s_finish | r_finish -> finish, s_suc_add | r_suc_add -> suc_add, 
-%             s_fail_add | r_fail_add -> fail_add, s_pay | r_pay -> pay, s_pay_fail | r_pay_fail -> pay_fail, 
-%             s_print_receipt | r_print_receipt -> print_receipt, s_clear_list | r_clear_list -> clear_list, 
-%             s_activate | r_activate -> activate
-%             }, 
-%             IH(0, 1) || BH(1) || SL({:}, [], 1, 1) || PT || PR
-%     )); 
 
 init 
     hide(
@@ -186,10 +189,12 @@ init
         },
         comm(
             {s_add_barcode | r_add_barcode -> add_barcode, s_add_item | r_add_item -> add_item, 
-            s_remove_item | r_remove_item -> remove_item, s_finish | r_finish -> finish, s_suc_add | r_suc_add -> suc_add, 
-            s_fail_add | r_fail_add -> fail_add, s_pay | r_pay -> pay, s_pay_fail | r_pay_fail -> pay_fail, 
-            s_print_receipt | r_print_receipt -> print_receipt, s_clear_list | r_clear_list -> clear_list, 
-            s_activate | r_activate -> activate
+            s_remove_item | r_remove_item -> remove_item, s_finish | r_finish -> finish, 
+            s_suc_add | r_suc_add -> suc_add, s_fail_add | r_fail_add -> fail_add, 
+            s_pay | r_pay -> pay, s_pay_fail | r_pay_fail -> pay_fail, 
+            s_print_receipt | r_print_receipt -> print_receipt, 
+            s_clear_list | r_clear_list -> clear_list, s_activate | r_activate -> activate
             }, 
-            IH(0, 1) || BH(1) || SL({:}, [], 1) || PT || PR
+            % maxitem, maxprice, maxprice, maxprice
+            IH({:}, 2, 2) || BH(2) || SL({:}, [], 2) || PT || PR
     ))); 

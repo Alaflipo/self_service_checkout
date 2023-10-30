@@ -1,0 +1,2 @@
+forall barcode: Barcode.[true*.receive_scanner(barcode).!(send_backend(barcode))*.
+    message_display(pr_suc)]false 

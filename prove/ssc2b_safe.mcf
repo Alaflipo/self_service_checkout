@@ -1,0 +1,8 @@
+[true*]
+forall items: Bag(Id).
+    [update_display(items).
+    !((exists i: Bag(Id).update_display(i)) || message_display(pr_suc))*]
+ (forall id:Id. !(val(id in items)) =>
+    [(exists price:Price.receive_backend(id,price)).
+    !(update_display(items + {id:1})).
+    message_display(pr_suc)]false)

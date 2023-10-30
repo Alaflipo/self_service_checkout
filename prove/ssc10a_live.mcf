@@ -1,0 +1,1 @@
+[true*.receive_payment(pay_fail)]mu X.([!(message_display(pay_fail))]X && <true>true)

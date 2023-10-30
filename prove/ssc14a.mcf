@@ -1,0 +1,8 @@
+forall id:Id. nu X(counter:Nat = 0).
+    [!((exists price: Price. receive_backend(id,price)) || (add_display(id)) || 
+        (remove_display(id)) || (exists i: Bag(Id). update_display(i)) )]X(counter) &&
+    [exists price: Price. receive_backend(id,price)]X(counter + 1) && 
+    [add_display(id)]X(counter + 1) &&
+    [remove_display(id)]X(max(counter - 1,0)) && 
+    [message_display(pr_suc)]X(0) && 
+    forall i: Nat.[update_display(L.i)](X(items) && val(count(id, L.i) == counter))

@@ -1,0 +1,2 @@
+[true*.message_display(pr_suc)]
+mu X. ([!(update_display({:}))]X && <true>true && [!(!(exists items:Bag(Id). update_display(items)) || update_display({:}))]false)

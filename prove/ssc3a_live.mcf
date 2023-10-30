@@ -1,0 +1,2 @@
+forall price:Price. val(value(price) <= 2) => ([true*.(exists id:Id.receive_backend(id,price))]
+    (forall i:Nat. (val(i < #L) && val(price in P.i)) => nu X. ([!(update_display(P.i))]X && <true>true) ))
