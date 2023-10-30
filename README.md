@@ -1,4 +1,4 @@
-# self_service_checkout
+# Self Service Checkout (SSC)
 A mcrl2 model of a self service checkout system for the course system validation (2IMF30)
 
 ## Converting files 
