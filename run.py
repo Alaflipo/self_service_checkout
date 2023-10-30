@@ -17,7 +17,7 @@ files = [f for f in listdir(path) if isfile(join(path, f))]
 mcf_files = [f for f in files if f.split('.')[1] == "mcf"]
 
 mcf_files.sort()
-mcf_files = mcf_files[14:] + mcf_files[1:14]
+mcf_files = mcf_files[14:] + mcf_files[1:14] + [mcf_files[0]]
 
 results = {}
 for file in mcf_files: 
